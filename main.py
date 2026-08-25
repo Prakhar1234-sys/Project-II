@@ -1,11 +1,22 @@
+import os
+import joblib
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-import joblib
-import os
 
-app = FastAPI()
+app = FastAPI(title="Mental Health Signal API")
 
-# Make sure the field names match the Android variables EXACTLY (case-sensitive)
+# Safe absolute path modeling load sequence
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+MODEL_PATH = os.path.join(BASE_DIR, "Mental_Health_Model.pkl")
+
+try:
+    model = joblib.load(MODEL_PATH)
+    print("🎉 SUCCESS: Model loaded perfectly!")
+except Exception as e:
+    model = None
+    print(f"❌ ERROR: Failed to load model file: {e}")
+
+# This data model maps directly to your Android fields
 class MentalHealthPayload(BaseModel):
     age: int
     gender: str
@@ -17,10 +28,18 @@ class MentalHealthPayload(BaseModel):
     study_hours: float
     stress_level: str
 
+# 👇 THIS FIXES THE "DETAIL NOT FOUND" ERROR FOR THE RAW PRIMARY URL
+@app.get("/")
+def read_root():
+    return {"message": "The Mental Health AI Backend Server is live and running!"}
+
 @app.post("/predict")
 def get_prediction(data: MentalHealthPayload):
+    if model is None:
+        raise HTTPException(status_code=500, detail="Machine learning model is offline.")
+    
     try:
-        # Array shape containing the 4 numerical columns your app sends
+        # Match your model's numerical input parameters
         features = [[
             data.age,
             data.screen_time,
@@ -29,10 +48,9 @@ def get_prediction(data: MentalHealthPayload):
         ]]
         
         prediction_output = model.predict(features)
-        return {"status": "success", "prediction": int(prediction_output[0])}
+        return {"status": "success", "prediction": int(prediction_output)}
 
     except Exception as err:
-        #  THIS LINE WILL FORCE RENDER LOGS TO PRINT THE REAL MACHINE LEARNING ERROR:
-        print(" MODEL CALCULATE CRASH:", str(err))
+        # Prints out model dimension mismatches in Render logs
+        print("❌ MODEL CALCULATE CRASH:", str(err))
         raise HTTPException(status_code=400, detail=str(err))
-
