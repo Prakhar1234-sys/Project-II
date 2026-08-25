@@ -1,60 +1,40 @@
-import os
-import joblib
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
+import joblib
+import os
 
-# 1. Initialize our FastAPI application
-app = FastAPI(title="Mental Health Predictor API")
+app = FastAPI()
 
-# 2. Get the current directory path and build a safe link to your model
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-MODEL_PATH = os.path.join(BASE_DIR, "Mental_Health_Model.pkl")
+# Make sure the field names match the Android variables EXACTLY (case-sensitive)
+class MentalHealthPayload(BaseModel):
+    age: int
+    gender: str
+    country: str
+    academic_level: str
+    platform: str
+    screen_time: float
+    unlocks: int
+    study_hours: float
+    stress_level: str
 
-# 3. Securely load your machine learning model file
-try:
-    if os.path.exists(MODEL_PATH):
-        model = joblib.load(MODEL_PATH)
-        print(" SUCCESS: Machine learning model loaded perfectly!")
-    else:
-        model = None
-        print(" WARNING: 'Mental_Health_Model.pkl' file was not found in this folder.")
-except Exception as e:
-    model = None
-    print(f" ERROR: Failed to load the model file. Reason: {e}")
-
-
-# 4. Define the structure of incoming data coming from the user/Android
-class HealthDataInput(BaseModel):
-    feature_one: float
-    feature_two: float
-
-
-# 5. Create a default "Home" web page route just to check if the server is awake
-@app.get("/")
-def home():
-    return {"message": "The Mental Health AI Backend Server is live and running!"}
-
-
-# 6. Create the endpoint route where the Android app sends data for a prediction
 @app.post("/predict")
-def get_prediction(data: HealthDataInput):
-    # Safeguard check to make sure the model is loaded before trying to use it
-    if model is None:
-        raise HTTPException(
-            status_code=500, detail="Machine learning model is not loaded on this server."
-        )
-
+def get_prediction(data: MentalHealthPayload):
     try:
-        # Structure the individual values into a 2D matrix array shape [[val1, val2]]
-        formatted_features = [[data.feature_one, data.feature_two]]
-
-        # Run your metrics through your trained scikit-learn model
-        prediction_output = model.predict(formatted_features)
-
-        # Send the final prediction back as a clean structured JSON package
+        # ⚠️ CRITICAL STEP: Your pre-trained .pkl model only understands numbers.
+        # If your model was trained ONLY on numerical columns (e.g., age, screen_time, unlocks, study_hours),
+        # you must list only those specific numbers in the exact order your model expects them!
+        
+        # Example: if your model takes: [Age, Screen Time, Unlocks, Study Hours]
+        features = [[
+            data.age,
+            data.screen_time,
+            data.unlocks,
+            data.study_hours
+        ]]
+        
+        # Run calculation
+        prediction_output = model.predict(features)
         return {"status": "success", "prediction": int(prediction_output[0])}
 
     except Exception as err:
-        raise HTTPException(
-            status_code=400, detail=f"Failed to process model inputs: {str(err)}"
-        )
+        raise HTTPException(status_code=400, detail=str(err))
