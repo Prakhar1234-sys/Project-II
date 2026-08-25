@@ -36,25 +36,32 @@ def read_root():
 @app.post("/predict")
 def get_prediction(data: MentalHealthPayload):
     if model is None:
-        raise HTTPException(status_code=500, detail="Machine learning model is completely offline.")
+        raise HTTPException(status_code=500, detail="Machine learning model is offline.")
     
     try:
-        # Currently tracking 4 parameters from your original form layout
+        # Let's inspect the hidden transformer structure before it runs
+        if hasattr(model, 'feature_names_in_'):
+            print("📋 EXACT MODEL COLUMNS EXPECTED:", list(model.feature_names_in_))
+        elif hasattr(model, 'named_steps') and 'preprocessor' in model.named_steps:
+            # If it's a pipeline, get the column layout names from the preprocessor step
+            preprocessor = model.named_steps['preprocessor']
+            if hasattr(preprocessor, 'feature_names_in_'):
+                print("📋 PIPELINE COLUMNS EXPECTED:", list(preprocessor.feature_names_in_))
+        
+        # Temporary 12-slot array to avoid hard crashes
         features = [[
-            data.age,
-            data.screen_time,
-            data.unlocks,
-            data.study_hours
+            data.age, data.screen_time, data.unlocks, data.study_hours,
+            0, 0, 0, 0, 0, 0, 0, 0
         ]]
         
-        # Run standard prediction matrix calculation
         prediction_output = model.predict(features)
-        return {"status": "success", "prediction": int(prediction_output[0])}
+        return {"status": "success", "prediction": int(prediction_output)}
 
     except Exception as err:
-        #  THIS WILL PRINT THE EXACT COLUMN NUMBER ERROR ON YOUR RENDER LOG VIEW SCREEN:
-        print("\n=================== MODEL CRASH DETECTED  ===================")
-        print(f"ERROR DETAILS: {str(err)}")
-        print("==================================================================\n")
-        raise HTTPException(status_code=400, detail=f"Model Processing Failed: {str(err)}")
-
+        # If the ColumnTransformer rejects the array shape, print out its structural requirements
+        print("\n=================== 🚨 COLUMN TRANSFORMER BLOCK 🚨 ===================")
+        print(f"CRASH REASON: {str(err)}")
+        if hasattr(err, 'args'):
+            print(f"ARGUMENTS: {err.args}")
+        print("====================================================================\n")
+        raise HTTPException(status_code=400, detail=f"Transformer Match Failure: {str(err)}")
