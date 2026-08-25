@@ -20,11 +20,7 @@ class MentalHealthPayload(BaseModel):
 @app.post("/predict")
 def get_prediction(data: MentalHealthPayload):
     try:
-        # ⚠️ CRITICAL STEP: Your pre-trained .pkl model only understands numbers.
-        # If your model was trained ONLY on numerical columns (e.g., age, screen_time, unlocks, study_hours),
-        # you must list only those specific numbers in the exact order your model expects them!
-        
-        # Example: if your model takes: [Age, Screen Time, Unlocks, Study Hours]
+        # Array shape containing the 4 numerical columns your app sends
         features = [[
             data.age,
             data.screen_time,
@@ -32,9 +28,11 @@ def get_prediction(data: MentalHealthPayload):
             data.study_hours
         ]]
         
-        # Run calculation
         prediction_output = model.predict(features)
         return {"status": "success", "prediction": int(prediction_output[0])}
 
     except Exception as err:
+        #  THIS LINE WILL FORCE RENDER LOGS TO PRINT THE REAL MACHINE LEARNING ERROR:
+        print(" MODEL CALCULATE CRASH:", str(err))
         raise HTTPException(status_code=400, detail=str(err))
+
