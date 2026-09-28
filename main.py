@@ -36,32 +36,41 @@ def read_root():
 @app.post("/predict")
 def get_prediction(data: MentalHealthPayload):
     if model is None:
-        raise HTTPException(status_code=500, detail="Machine learning model is offline.")
-    
+        raise HTTPException(
+            status_code=500, detail="Machine learning model is offline."
+        )
+
     try:
-        # Let's inspect the hidden transformer structure before it runs
-        if hasattr(model, 'feature_names_in_'):
-            print("📋 EXACT MODEL COLUMNS EXPECTED:", list(model.feature_names_in_))
-        elif hasattr(model, 'named_steps') and 'preprocessor' in model.named_steps:
-            # If it's a pipeline, get the column layout names from the preprocessor step
-            preprocessor = model.named_steps['preprocessor']
-            if hasattr(preprocessor, 'feature_names_in_'):
-                print("📋 PIPELINE COLUMNS EXPECTED:", list(preprocessor.feature_names_in_))
-        
-        # Temporary 12-slot array to avoid hard crashes
-        features = [[
-            data.age, data.screen_time, data.unlocks, data.study_hours,
-            0, 0, 0, 0, 0, 0, 0, 0
-        ]]
-        
-        prediction_output = model.predict(features)
-        return {"status": "success", "prediction": int(prediction_output)}
+        # We fill the remaining columns with standard neutral placeholder values (e.g., 0.0 or 5.0)
+        # to ensure the ColumnTransformer layout sees all 12 expected training fields!
+        raw_data_dict = {
+            "Age": [data.age],
+            "Gender": [data.gender],
+            "Country": [data.country],
+            "Academic_Level": [data.academic_level],
+            "Platform": [data.platform],
+            "Screen_Time": [data.screen_time],
+            "Unlocks": [data.unlocks],
+            "Study_Hours": [data.study_hours],
+            "Stress_Level": [data.stress_level],
+            # 👇 ADD THESE THREE FILLED LINES BELOW TO FIX THE 400 ERROR
+            "Sleep_Duration": [7.0],  # Dummy standard sleep hours
+            "Social_Media_Hours": [data.screen_time],  # Maps screen time directly here
+            "Work_Study_Balance": [5.0],  # Neutral scale placeholder (1-10)
+        }
+
+        # Convert the dictionary map array into a Pandas DataFrame table structure
+        input_dataframe = pd.DataFrame(raw_data_dict)
+
+        # Run prediction calculations against the DataFrame schema
+        prediction_output = model.predict(input_dataframe)
+        return {"status": "success", "prediction": int(prediction_output[0])}
 
     except Exception as err:
-        # If the ColumnTransformer rejects the array shape, print out its structural requirements
-        print("\n=================== 🚨 COLUMN TRANSFORMER BLOCK 🚨 ===================")
-        print(f"CRASH REASON: {str(err)}")
-        if hasattr(err, 'args'):
-            print(f"ARGUMENTS: {err.args}")
-        print("====================================================================\n")
-        raise HTTPException(status_code=400, detail=f"Transformer Match Failure: {str(err)}")
+        print("\n=================== 🚨 MODEL CRASH DETAILS 🚨 ===================")
+        print(f"ERROR: {str(err)}")
+        print("==================================================================\n")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Model Processing Failed: {str(err)}",
+        )
