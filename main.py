@@ -44,21 +44,35 @@ def get_prediction(data: MentalHealthPayload):
     try:
         # We fill the remaining columns with standard neutral placeholder values (e.g., 0.0 or 5.0)
         # to ensure the ColumnTransformer layout sees all 12 expected training fields!
+          
         raw_data_dict = {
             "Age": [data.age],
             "Gender": [data.gender],
-            "Country": [data.country],
+            "Grouped_country": [
+                data.country
+            ],  #  Matches 'Grouped_country'
             "Academic_Level": [data.academic_level],
-            "Platform": [data.platform],
-            "Screen_Time": [data.screen_time],
-            "Unlocks": [data.unlocks],
+            "Most_Used_Platform": [
+                data.platform
+            ],  #   'Most_Used_Platform'
+            "Avg_Daily_Usage_Hours": [
+                data.screen_time
+            ],  #  'Avg_Daily_Usage_Hours'
+            "Daily_Unlocks": [data.unlocks],  # 'Daily_Unlocks'
             "Study_Hours": [data.study_hours],
             "Stress_Level": [data.stress_level],
-            # 👇 ADD THESE THREE FILLED LINES BELOW TO FIX THE 400 ERROR
-            "Sleep_Duration": [7.0],  # Dummy standard sleep hours
-            "Social_Media_Hours": [data.screen_time],  # Maps screen time directly here
-            "Work_Study_Balance": [5.0],  # Neutral scale placeholder (1-10)
+            # Fill remaining columns with standard template placeholders
+            "Sleep_Hours_Per_Night": [
+                7.0
+            ],  # 'Sleep_Hours_Per_Night'
+            "Purpose_Of_Use": [
+                "Browsing"
+            ],  #  'Purpose_Of_Use' (Standard default)
+            "Physical_Activity_Hours": [
+                1.5
+            ],  #  'Physical_Activity_Hours'
         }
+
 
         # Convert the dictionary map array into a Pandas DataFrame table structure
         input_dataframe = pd.DataFrame(raw_data_dict)
