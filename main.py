@@ -1,89 +1,89 @@
 import os
 import joblib
 import pandas as pd
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+from fastapi import FastAPI
+from pydantic import BaseModel, Field
+from typing import Literal
+from fastapi.middleware.cors import CORSMiddleware
+
+# Safely resolve path to the model file in the current directory
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+MODEL_PATH = os.path.join(BASE_DIR, 'Mental_Health_Model.pkl')
+model = joblib.load(MODEL_PATH)
+
+top_countries = ['Other', 'India', 'USA', 'Canada', 'Australia', 'UK', 'Germany', 'Mexico', 'Turkey', 'France']
 
 app = FastAPI(title="Mental Health Signal API")
 
-# Safe absolute path modeling load sequence
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-MODEL_PATH = os.path.join(BASE_DIR, "Mental_Health_Model.pkl")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-try:
-    model = joblib.load(MODEL_PATH)
-    print(" SUCCESS: Model loaded perfectly!")
-except Exception as e:
-    model = None
-    print(f" ERROR: Failed to load model file: {e}")
-
-# This data model maps directly to your Android fields
-class MentalHealthPayload(BaseModel):
-    age: int
-    gender: str
+# Input Pydantic Model matching your UI payload data
+class StudentData(BaseModel):
+    age: int = Field(..., ge=10, le=100)
+    gender: Literal['Male', 'Female']
     country: str
-    academic_level: str
-    platform: str
-    screen_time: float
-    unlocks: int
-    study_hours: float
+    academic_level: Literal['Undergraduate', 'Graduate', 'High School']
+    most_used_platform: str  # Kept flexible for handling Android dropdown titles safely
+    purpose_of_use: str = "Entertainment" # Default placeholder if not provided by UI
+    avg_daily_usage_hours: float = Field(..., ge=0, le=24)
+    daily_unlocks: int = Field(..., ge=0)
+    study_hours: float = Field(..., ge=0, le=24)
+    physical_activity_hours: float = 1.5  # Standard placeholder baseline
+    sleep_hours_per_night: float = 7.0   # Standard placeholder baseline
     stress_level: str
 
-# THIS FIXES THE "DETAIL NOT FOUND" ERROR FOR THE RAW PRIMARY URL
-@app.get("/")
-def read_root():
+# Output Response Model matching the original model metrics format
+class PredictionResponse(BaseModel):
+    predicted_mental_health_score: float
+
+@app.get('/')
+def greet():
     return {"message": "The Mental Health AI Backend Server is live and running!"}
 
-@app.post("/predict")
-def get_prediction(data: MentalHealthPayload):
-    if model is None:
-        raise HTTPException(
-            status_code=500, detail="Machine learning model is offline."
-        )
+@app.post('/predict', response_model=PredictionResponse)
+def predict(data: StudentData):
+    # Normalize short Android UI labels to the full words the model expects
+    stress_clean = data.stress_level.strip()
+    if stress_clean == "Med": stress_clean = "Medium"
+    elif stress_clean == "V.High": stress_clean = "Very High"
+    elif stress_clean not in ['Medium', 'Low', 'Very High', 'High']: stress_clean = "Medium"
 
+    platform_clean = data.most_used_platform.strip()
+    if "Select" in platform_clean: platform_clean = "Instagram" # Fallback
+
+    gender_clean = data.gender.strip().capitalize()
+    if gender_clean not in ['Male', 'Female']: gender_clean = "Female"
+
+    academic_clean = data.academic_level.strip()
+    if "Undergraduate" in academic_clean: academic_clean = "Undergraduate"
+
+    # Normalize Country name casing to match the top countries list comparison
+    country_input = data.country.strip().capitalize()
+    if country_input == "India": country_input = "India"
     
-    try:
-        # Standardize capitalization to match typical training datasets
-        gender_clean = data.gender.strip()
-        academic_clean = data.academic_level.strip()
-        platform_clean = data.platform.strip()
+    country_group = country_input if country_input in top_countries else "Other"
 
-        # Map dropdown selections to common dataset values if needed
-        if platform_clean == "Select Platform":
-            platform_clean = "Instagram"  # Fallback baseline
+    # 🌟 The Exact 13-Column Dataframe Layout required by your ColumnTransformer
+    input_row = pd.DataFrame([{
+        'Age': data.age,
+        'Gender': gender_clean,
+        'Country': country_input,
+        'Academic_Level': academic_clean,
+        'Most_Used_Platform': platform_clean,
+        'Purpose_Of_Use': data.purpose_of_use,
+        'Avg_Daily_Usage_Hours': data.avg_daily_usage_hours,
+        'Daily_Unlocks': data.daily_unlocks,
+        'Study_Hours': data.study_hours,
+        'Physical_Activity_Hours': data.physical_activity_hours,
+        'Sleep_Hours_Per_Night': data.sleep_hours_per_night,
+        'Stress_Level': stress_clean,
+        'Grouped_country': country_group
+    }])
 
-        cleaned_stress_level = data.stress_level
-        if cleaned_stress_level == "Med":
-            cleaned_stress_level = "Medium"
-        elif cleaned_stress_level == "V.High":
-            cleaned_stress_level = "Very High"
-
-        raw_data_dict = {
-            "Age": [data.age],
-            "Gender": [gender_clean],
-            "Grouped_country": [data.country.strip()],
-            "Academic_Level": [academic_clean],
-            "Most_Used_Platform": [platform_clean],
-            "Avg_Daily_Usage_Hours": [data.screen_time],
-            "Daily_Unlocks": [data.unlocks],
-            "Study_Hours": [data.study_hours],
-            "Stress_Level": [cleaned_stress_level],
-            # Hardcoded placeholders (If your model relies heavily on these columns,
-            # try changing them to see how the model reacts!)
-            "Sleep_Hours_Per_Night": [5.0],  # Lower this to test high-stress triggers
-            "Purpose_Of_Use": ["Social Media"],
-            "Physical_Activity_Hours": [0.5],
-        }
-
-
-        input_dataframe = pd.DataFrame(raw_data_dict)
-        prediction_output = model.predict(input_dataframe)
-        return {"status": "success", "prediction": int(prediction_output[0])}
-
-    except Exception as err:
-        print("\n=================== 🚨 MODEL CRASH DETAILS 🚨 ===================")
-        print(f"ERROR: {str(err)}")
-        print("==================================================================\n")
-        raise HTTPException(
-            status_code=400, detail=f"Model Processing Failed: {str(err)}"
-        )
+    prediction = model.predict(input_row)[0]
+    return PredictionResponse(predicted_mental_health_score=round(float(prediction), 2))
