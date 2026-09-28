@@ -41,30 +41,40 @@ def get_prediction(data: MentalHealthPayload):
             status_code=500, detail="Machine learning model is offline."
         )
 
+    
     try:
-        # 👇 TEXT TRANSLATOR FIX: Map Android short labels to full words
+        # Standardize capitalization to match typical training datasets
+        gender_clean = data.gender.strip()
+        academic_clean = data.academic_level.strip()
+        platform_clean = data.platform.strip()
+
+        # Map dropdown selections to common dataset values if needed
+        if platform_clean == "Select Platform":
+            platform_clean = "Instagram"  # Fallback baseline
+
         cleaned_stress_level = data.stress_level
         if cleaned_stress_level == "Med":
             cleaned_stress_level = "Medium"
         elif cleaned_stress_level == "V.High":
             cleaned_stress_level = "Very High"
 
-        # Update your dictionary layout framework below to use the translated variable
         raw_data_dict = {
             "Age": [data.age],
-            "Gender": [data.gender],
-            "Grouped_country": [data.country],
-            "Academic_Level": [data.academic_level],
-            "Most_Used_Platform": [data.platform],
+            "Gender": [gender_clean],
+            "Grouped_country": [data.country.strip()],
+            "Academic_Level": [academic_clean],
+            "Most_Used_Platform": [platform_clean],
             "Avg_Daily_Usage_Hours": [data.screen_time],
             "Daily_Unlocks": [data.unlocks],
             "Study_Hours": [data.study_hours],
-            # 👇 CHANGE THIS LINE TO USE THE TRANSLATED TEXT VARIABLE:
             "Stress_Level": [cleaned_stress_level],
-            "Sleep_Hours_Per_Night": [7.0],
-            "Purpose_Of_Use": ["Browsing"],
-            "Physical_Activity_Hours": [1.5],
+            # Hardcoded placeholders (If your model relies heavily on these columns,
+            # try changing them to see how the model reacts!)
+            "Sleep_Hours_Per_Night": [5.0],  # Lower this to test high-stress triggers
+            "Purpose_Of_Use": ["Social Media"],
+            "Physical_Activity_Hours": [0.5],
         }
+
 
         input_dataframe = pd.DataFrame(raw_data_dict)
         prediction_output = model.predict(input_dataframe)
